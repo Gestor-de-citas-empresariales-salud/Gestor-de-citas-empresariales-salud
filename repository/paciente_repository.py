@@ -1,9 +1,11 @@
 import uuid
 from domain.paciente_domain import PacienteCreate, PacienteResponseData
+from datetime import datetime
+
 
 class PacienteRepository:
     def __init__(self):
-        # 3 pacientes iniciales de prueba en memoria
+        # Pacientes iniciales
         self._db_pacientes = [
             {
                 "paciente_id": "b3c1f1de-5a1e-4f0b-9d3a-2f7b1c9e8a10",
@@ -16,7 +18,7 @@ class PacienteRepository:
                 "email": "laura@correo.com",
                 "telefono": "3001234567",
                 "direccion": "Cra 27 # 10-15",
-                "password": "hashedpassword"
+                "password": "hashedpassword",
             },
             {
                 "paciente_id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
@@ -29,7 +31,7 @@ class PacienteRepository:
                 "email": "carlos.perez@correo.com",
                 "telefono": "3109876543",
                 "direccion": "Calle 50 # 25-30",
-                "password": "hashedpassword"
+                "password": "hashedpassword",
             },
             {
                 "paciente_id": "f5e4d3c2-1b0a-9f8e-7d6c-5b4a3f2e1d0c",
@@ -42,8 +44,8 @@ class PacienteRepository:
                 "email": "ana.rodriguez@correo.com",
                 "telefono": "3201112233",
                 "direccion": "Avenida iva 15",
-                "password": "hashedpassword"
-            }
+                "password": "hashedpassword",
+            },
         ]
 
     def buscar_por_documento(self, tipo_id: int, num_doc: str):
@@ -63,7 +65,59 @@ class PacienteRepository:
             numero_documento=datos.numero_documento,
             nombres=datos.nombres,
             apellidos=datos.apellidos,
-            token_inicial="eyJhbGciOi..."
+            token_inicial="eyJhbGciOi...",
         )
+
+    @staticmethod
+    def actualizar_contacto_en_memoria(
+        paciente_id: str, datos_actualizacion: dict, lista_pacientes: list
+    ):
+        # Buscar al paciente en la memoria por su ID
+        paciente_encontrado = None
+        for paciente in lista_pacientes:
+            if (
+                paciente.get("paciente_id") == paciente_id
+                or paciente.get("id") == paciente_id
+            ):
+                paciente_encontrado = paciente
+                break
+
+        if not paciente_encontrado:
+            raise ValueError("No se encontró el paciente indicado")
+
+        valores_por_defecto = {
+            None,
+            "",
+            "string",
+            "correo@ejemplo.com",
+            "user@example.com",
+        }
+
+        campos_validos = {
+            k: v for k, v in datos_actualizacion.items() if v not in valores_por_defecto
+        }
+
+        if not campos_validos:
+            raise ValueError("No se enviaron campos válidos para actualizar")
+
+        # Aplicar la actualización parcial solo con los campos válidos
+        for campo, valor in campos_validos.items():
+            paciente_encontrado[campo] = valor
+
+        # Asignar la fecha actual de actualización
+        fecha_actual = datetime.now().isoformat()
+        paciente_encontrado["fecha_actualizacion"] = fecha_actual
+
+        # Auditoria local
+        log_auditoria = {
+            "accion": "MODIFICAR_CONTACTO",
+            "paciente_id": paciente_id,
+            "campos_modificados": list(campos_validos.keys()),
+            "timestamp": fecha_actual,
+        }
+        print(f"[AUDIT LOG LOCAL]: {log_auditoria}")
+
+        return paciente_encontrado
+
 
 paciente_repository = PacienteRepository()

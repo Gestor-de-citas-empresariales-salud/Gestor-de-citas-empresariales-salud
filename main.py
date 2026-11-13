@@ -8,7 +8,7 @@ app = FastAPI(title="Gestor de citas empresariales salud")
 # Registrar el router de la HU-001
 app.include_router(paciente_router)
 
-# Capturador global para el Caso 2: Datos o parámetros inválidos (HTTP 400 Bad Request)
+# Capturador global
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     return JSONResponse(
