@@ -132,3 +132,16 @@ class PacienteService:
                     "success": False,
                 },
             )
+
+
+def registrar_auditoria_contacto(paciente_id: str, campos_modificados: dict):
+    # Simula o ejecuta el registro en el servicio de auditoría requerido
+    audit_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "paciente_id": paciente_id,
+        "accion": "MODIFICAR_CONTACTO",
+        "campos_cambiados": list(campos_modificados.keys()),
+    }
+    # Aquí insertarías el log en tu base de datos o servicio de auditoría
+    print(f"[AUDIT LOG] Registro generado: {audit_entry}")
+    return True
