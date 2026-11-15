@@ -2,11 +2,16 @@ from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from api.paciente_router import router as paciente_router
+from api.profesional_router import router as profesional_router
 
 app = FastAPI(title="Gestor de citas empresariales salud")
 
-# Registrar el router de la HU-001
+# Pacientes
 app.include_router(paciente_router)
+
+# Profesionales
+app.include_router(profesional_router)
+
 
 # Capturador global
 @app.exception_handler(RequestValidationError)
@@ -17,11 +22,11 @@ async def validation_exception_handler(request, exc):
     if errors:
         err = errors[0]
         msg_original = err.get("msg", "")
-        # Obtenemos la ubicación del campo (ej. ['body', 'contactos', 0, 'parentesco'] -> 'parentesco')
+        # Obtenemos la ubicación del campo del input
         loc = err.get("loc", [])
         campo = loc[-1] if loc else "campo"
 
-        # Traducción y mapeo amigable en español según el error de Pydantic
+        # Traducción y mapeo del error de Pydantic
         if "at least" in msg_original or "min_length" in err.get("type", ""):
             mensaje = f"El campo '{campo}' es obligatorio o muy corto"
         elif "string type" in msg_original or "field required" in msg_original:
@@ -40,6 +45,7 @@ async def validation_exception_handler(request, exc):
             "success": False,
         },
     )
+
 
 @app.get("/health")
 def health():
