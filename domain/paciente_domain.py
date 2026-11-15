@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, field_validator
-from typing import Optional
+from typing import List, Optional
 import re
 
 
@@ -76,3 +76,33 @@ class PacienteContactoUpdate(BaseModel):
         if v is not None:
             return validar_formato_correo(str(v), es_opcional=True)
         return v
+
+
+# Esquema para cada contacto dentro de la lista JSON
+class ContactoEmergenciaSchema(BaseModel):
+    nombre: str = Field(..., min_length=2, description="Nombre completo del contacto")
+    parentesco: str = Field(..., min_length=4, description="Parentesco con el paciente")
+    telefono: str = Field(..., description="Teléfono celular válido de 10 dígitos")
+
+    @field_validator("nombre", "parentesco")
+    @classmethod
+    def validar_no_generico(cls, v: str) -> str:
+        if not v or v.strip().lower() == "string":
+            raise ValueError(
+                "El campo no puede contener un valor genérico o estar vacío"
+            )
+        return v.strip()
+
+    @field_validator("telefono")
+    def validador_telefono(cls, v: str) -> str:
+        # Validación limpia (celular: 10 dígitos empezando por 3)
+        if not v.isdigit() or len(v) != 10 or not v.startswith("3"):
+            raise ValueError("El teléfono del contacto no tiene un formato válido")
+        return v
+
+
+# Esquema de la petición PUT para gestionar los contactos
+class GestionarContactosEmergenciaRequest(BaseModel):
+    contactos: List[ContactoEmergenciaSchema] = Field(
+        ..., description="Lista de contactos de emergencia"
+    )
