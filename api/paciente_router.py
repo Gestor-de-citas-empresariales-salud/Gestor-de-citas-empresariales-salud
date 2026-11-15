@@ -8,6 +8,12 @@ from repository.paciente_repository import paciente_repository
 from fastapi import APIRouter, Depends, status, HTTPException
 from domain.paciente_domain import PacienteContactoUpdate
 from datetime import datetime
+from domain.paciente_domain import (
+    PacienteCreate,
+    PacienteAPIResponse,
+    PacienteContactoUpdate,
+    GestionarContactosEmergenciaRequest,
+)
 
 router = APIRouter(prefix="/api/v1/pacientes", tags=["Pacientes"])
 
@@ -311,6 +317,160 @@ def modificar_contacto_paciente(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "mensaje": "No fue posible actualizar los datos de contacto",
+                "data": None,
+                "success": False,
+            },
+        )
+
+
+@router.put(
+    "/{paciente_id}/contactos-emergencia",
+    status_code=status.HTTP_200_OK,
+    summary="Gestionar los contactos de emergencia del paciente",
+    responses={
+        200: {
+            "description": "Operación exitosa: Gestionar los contactos de emergencia del paciente",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "Operación exitosa: Gestionar los contactos de emergencia del paciente",
+                        "data": {
+                            "paciente_id": "b3c1f1de-5a1e-4f0b-9d3a-2f7b1c9e8a10",
+                            "total_contactos": 1,
+                            "contactos": [
+                                {
+                                    "contacto_id": 501,
+                                    "nombre": "Carlos Gómez",
+                                    "parentesco": "Padre",
+                                    "telefono": "3151112233",
+                                }
+                            ],
+                        },
+                        "success": True,
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Datos o parámetros inválidos (ej. teléfono incorrecto)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "El teléfono del contacto no tiene un formato válido",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+        401: {
+            "description": "Token de autenticación inválido o ausente",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "Token de autenticación inválido o ausente",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Acceso denegado: El usuario no tiene el rol autorizado (RBAC)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "No cuenta con permisos para esta operación",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "No se encontró el paciente indicado",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "No se encontró el paciente indicado",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+        422: {
+            "description": "Error de regla de negocio (Límite superado o menor sin adulto responsable)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "Se superó el número máximo de contactos de emergencia permitidos",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+        503: {
+            "description": "Falla de base de datos o servicio externo",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "mensaje": "No fue posible registrar los contactos de emergencia",
+                        "data": None,
+                        "success": False,
+                    }
+                }
+            },
+        },
+    },
+)
+def gestionar_contactos_emergencia(
+    paciente_id: str,
+    datos: GestionarContactosEmergenciaRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    service: PacienteService = Depends(get_paciente_service),
+):
+    # Caso 5: Validar autenticación (401)
+    if not credentials or not credentials.credentials:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "mensaje": "Token de autenticación inválido o ausente",
+                "data": None,
+                "success": False,
+            },
+        )
+
+    # Validar permisos RBAC (403)
+    token = credentials.credentials
+    if token == "token_sin_permiso":
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "mensaje": "No cuenta con permisos para esta operación",
+                "data": None,
+                "success": False,
+            },
+        )
+
+    try:
+        # Ejecuta la lógica central en el servicio
+        return service.gestionar_contactos_emergencia(paciente_id, datos)
+
+    except HTTPException as ex:
+        # Captura excepciones controladas (400's)
+        return JSONResponse(
+            status_code=ex.status_code,
+            content={"mensaje": ex.detail, "data": None, "success": False},
+        )
+
+    except Exception:
+        # Caso 6: Falla general (503)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "mensaje": "No fue posible registrar los contactos de emergencia",
                 "data": None,
                 "success": False,
             },

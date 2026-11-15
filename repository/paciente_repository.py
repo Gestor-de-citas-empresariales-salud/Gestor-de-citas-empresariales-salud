@@ -119,5 +119,26 @@ class PacienteRepository:
 
         return paciente_encontrado
 
+    @staticmethod
+    def actualizar_contactos_emergencia(
+        paciente_id: str, contactos_guardados: list, lista_pacientes: list
+    ):
+        # Buscar al paciente en la memoria por su ID
+        paciente_encontrado = None
+        for paciente in lista_pacientes:
+            if (
+                paciente.get("paciente_id") == paciente_id
+                or paciente.get("id") == paciente_id
+            ):
+                paciente_encontrado = paciente
+                break
+
+        if not paciente_encontrado:
+            raise ValueError("No se encontró el paciente indicado")
+
+        # Asignar la lista de contactos de emergencia al paciente
+        paciente_encontrado["contactos_emergencia"] = contactos_guardados
+        return paciente_encontrado
+
 
 paciente_repository = PacienteRepository()
