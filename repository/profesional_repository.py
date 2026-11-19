@@ -94,5 +94,33 @@ class ProfesionalRepository:
         profesional["estado"] = "HABILITADO" if activo else "INHABILITADO"
         return profesional
 
+    def asignar_sede(self, profesional_id: str, sede_id: int):
+        profesional = self.buscar_por_id(profesional_id)
+        if not profesional:
+            return None
+
+        # Inicializamos lista de sedes si no existe
+        if "sedes" not in profesional:
+            profesional["sedes"] = []
+
+        if sede_id not in profesional["sedes"]:
+            profesional["sedes"].append(sede_id)
+
+        return {"profesional_id": profesional_id, "sede_id": sede_id, "asignada": True}
+
+    def guardar_jornada(self, profesional_id: str, bloques: list, horas_semanales: int):
+        profesional = self.buscar_por_id(profesional_id)
+        if not profesional:
+            return None
+
+        profesional["jornada_laboral"] = bloques
+        profesional["horas_semanales"] = horas_semanales
+
+        return {
+            "profesional_id": profesional_id,
+            "horas_semanales": horas_semanales,
+            "agenda_notificada": True,
+        }
+
 
 profesional_repository = ProfesionalRepository()
