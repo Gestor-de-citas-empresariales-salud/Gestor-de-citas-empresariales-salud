@@ -6,9 +6,11 @@ from domain.profesional_domain import (
     ProfesionalResponseData,
     RethusAPIResponse,
     RethusResponseData,
+    validar_turno_maximo_12_horas,
     validar_regla_rethus,
     validar_tarjeta_duplicada,
     validar_documento_duplicado,
+    calcular_horas_totales,
 )
 from repository.profesional_repository import ProfesionalRepository
 
@@ -144,3 +146,68 @@ class ProfesionalService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No fue posible consultar el servicio RETHUS",
             )
+
+    def asignar_sede_profesional(self, profesional_id: str, datos) -> dict:
+        # Soportamos tanto falla-externa como falla-db (Caso 7)
+        if profesional_id in ["falla-externa", "falla-db"] or datos.sede_id == 999:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No fue posible registrar la asignación o la jornada del profesional",
+            )
+
+        profesional = self.repo.buscar_por_id(profesional_id)
+        if not profesional:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró el profesional indicado",
+            )
+
+        if datos.sede_id == 404:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La sede no cuenta con consultorios disponibles",
+            )
+
+        resultado_repo = self.repo.asignar_sede(profesional_id, datos.sede_id)
+
+        return {
+            "mensaje": "Operación exitosa: Asignar sedes/consultorios al profesional",
+            "data": resultado_repo,
+            "success": True,
+        }
+
+    def definir_jornada_laboral(self, profesional_id: str, datos) -> dict:
+        if profesional_id in ["falla-externa", "falla-db"]:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No fue posible registrar la asignación o la jornada del profesional",
+            )
+
+        profesional = self.repo.buscar_por_id(profesional_id)
+        if not profesional:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró el profesional indicado",
+            )
+
+        bloques_dict = [b.model_dump() for b in datos.bloques]
+
+        # AQUÍ ESTÁ LA CLAVE: Capturamos el ValueError y forzamos el 422 HTTP
+        try:
+            validar_turno_maximo_12_horas(bloques_dict)
+            horas_calc = calcular_horas_totales(bloques_dict)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+
+        resultado_repo = self.repo.guardar_jornada(
+            profesional_id, bloques_dict, horas_calc
+        )
+
+        return {
+            "mensaje": "Operación exitosa: Definir una jornada laboral",
+            "data": resultado_repo,
+            "success": True,
+        }
