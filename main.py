@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from api.paciente_router import router as paciente_router
 from api.profesional_router import router as profesional_router
+from api.especialidad_router import router as especialidad_router
 
 app = FastAPI(title="Gestor de citas empresariales salud")
 
@@ -11,6 +12,9 @@ app.include_router(paciente_router)
 
 # Profesionales
 app.include_router(profesional_router)
+
+# Especialidades
+app.include_router(especialidad_router)
 
 
 # Capturador global
