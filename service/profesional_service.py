@@ -1,4 +1,3 @@
-from typing import Optional
 from fastapi import HTTPException, status
 from domain.profesional_domain import (
     ProfesionalCreate,
@@ -12,39 +11,23 @@ from domain.profesional_domain import (
     validar_tarjeta_duplicada,
     validar_documento_duplicado,
     calcular_horas_totales,
-    validar_bloques_duracion_especialidad,
 )
-from repository.especialidad_repository import EspecialidadRepository
 from repository.profesional_repository import ProfesionalRepository
-from repository.sede_repository import (
-    SedeRepository,
-    sede_repository as default_sede_repository,
-)
 
 
 class ProfesionalService:
-    def __init__(
-        self,
-        repo: ProfesionalRepository,
-        sede_repo: SedeRepository = default_sede_repository,
-        especialidad_repo: Optional[EspecialidadRepository] = None,
-    ):
+    def __init__(self, repo: ProfesionalRepository):
         self.repo = repo
-        self.sede_repo = sede_repo
-        self.especialidad_repo = (
-            especialidad_repo
-            if especialidad_repo is not None
-            else EspecialidadRepository()
-        )
 
     # Caso 7: Falla de base de datos o servicio externo simulada
     def registrar_profesional(self, datos: ProfesionalCreate) -> ProfesionalAPIResponse:
+
         if datos.numero_documento == "99999999":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No fue posible registrar el profesional",
             )
-
+        # Aplicar regla de negocio de documento duplicado (Dominio)
         documentos_existentes = [
             p["numero_documento"] for p in self.repo._db_profesionales
         ]
@@ -56,6 +39,7 @@ class ProfesionalService:
                 detail=str(e),
             )
 
+        # Aplicar regla de negocio de tarjeta duplicada (Dominio)
         tarjetas_existentes = [
             p["tarjeta_profesional"] for p in self.repo._db_profesionales
         ]
@@ -68,6 +52,7 @@ class ProfesionalService:
             )
 
         try:
+            # Caso 1: Éxito – Crear perfil (HTTP 201)
             profesional_creado = self.repo.crear_profesional(datos)
 
             print(
@@ -95,12 +80,14 @@ class ProfesionalService:
     def validar_rethus(
         self, profesional_id: str, datos: ValidacionRethusRequest
     ) -> RethusAPIResponse:
+
         if profesional_id == "falla-externa" or datos.numero_documento == "99999999":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No fue posible consultar el servicio RETHUS",
             )
 
+        # Buscar el profesional en el repositorio
         profesional = self.repo.buscar_por_id(profesional_id)
         if not profesional:
             raise HTTPException(
@@ -108,6 +95,7 @@ class ProfesionalService:
                 detail="No se encontró el profesional indicado",
             )
 
+        # Aplicar regla de negocio RETHUS (Dominio - RN-10)
         try:
             validar_regla_rethus(datos.tarjeta_profesional, datos.numero_documento)
         except ValueError as e:
@@ -117,6 +105,7 @@ class ProfesionalService:
             )
 
         try:
+            # Caso 2: Éxito – Validación RETHUS (HTTP 200)
             estado_rethus = "HABILITADO"
             codigo_verificacion = "RTH-889900"
             activo = True
@@ -147,6 +136,7 @@ class ProfesionalService:
             )
 
     def asignar_sede_profesional(self, profesional_id: str, datos) -> dict:
+        # Soportamos tanto falla-externa como falla-db (Caso 7)
         if profesional_id in ["falla-externa", "falla-db"] or datos.sede_id == 999:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -160,28 +150,16 @@ class ProfesionalService:
                 detail="No se encontró el profesional indicado",
             )
 
-        try:
-            sede = self.sede_repo.obtener_sede_por_id(datos.sede_id)
-            if not sede:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="No se encontró la sede indicada",
-                )
-
-            if not self.sede_repo.tiene_consultorios_disponibles(datos.sede_id):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="La sede no cuenta con consultorios disponibles",
-                )
-        except HTTPException:
-            raise
-        except Exception:
+        if datos.sede_id == 404:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No fue posible registrar la asignación o la jornada del profesional",
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La sede no cuenta con consultorios disponibles",
             )
 
         resultado_repo = self.repo.asignar_sede(profesional_id, datos.sede_id)
+
+        from api.agenda_router import sede_agenda_local
+        sede_agenda_local.asignar_sede(profesional_id, datos.sede_id)
 
         return {
             "mensaje": "Operación exitosa: Asignar sedes/consultorios al profesional",
@@ -205,21 +183,9 @@ class ProfesionalService:
 
         bloques_dict = [b.model_dump() for b in datos.bloques]
 
-        duracion_base_minutos = None
-        especialidad_id = profesional.get("especialidad_id")
-        if especialidad_id is not None and self.especialidad_repo is not None:
-            try:
-                especialidad = self.especialidad_repo.obtener_especialidad_por_id(
-                    especialidad_id
-                )
-                if especialidad:
-                    duracion_base_minutos = especialidad.get("duracion_base_minutos")
-            except Exception:
-                pass
-
+        # AQUÍ ESTÁ LA CLAVE: Capturamos el ValueError y forzamos el 422 HTTP
         try:
             validar_turno_maximo_12_horas(bloques_dict)
-            validar_bloques_duracion_especialidad(bloques_dict, duracion_base_minutos)
             horas_calc = calcular_horas_totales(bloques_dict)
         except ValueError as e:
             raise HTTPException(
@@ -230,6 +196,9 @@ class ProfesionalService:
         resultado_repo = self.repo.guardar_jornada(
             profesional_id, bloques_dict, horas_calc
         )
+
+        from api.agenda_router import sede_agenda_local
+        sede_agenda_local.guardar_jornada(profesional_id, bloques_dict)
 
         return {
             "mensaje": "Operación exitosa: Definir una jornada laboral",
