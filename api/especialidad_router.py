@@ -298,7 +298,7 @@ def asociar_cups_especialidad(
     "/{especialidad_id}/duracion-base",
     response_model=DuracionBaseAPIResponse,
     status_code=status.HTTP_200_OK,
-    summary="Definir la duración base de la cita por especialidad (FUN-13)",
+    summary="Definir la duración base de la cita por especialidad",
     responses={
         200: {
             "description": "Operación exitosa: Definir la duración base de la cita por especialidad",
@@ -424,7 +424,7 @@ def definir_duracion_base(
     "/{especialidad_id}/requisitos-previos",
     response_model=RequisitosPreviosAPIResponse,
     status_code=status.HTTP_200_OK,
-    summary="Parametrizar requisitos previos o preparación (FUN-14)",
+    summary="Parametrizar requisitos previos o preparación",
     responses={
         200: {
             "description": "Operación exitosa: Parametrizar requisitos previos o preparación",
@@ -550,7 +550,7 @@ def parametrizar_requisitos_previos(
     "/{especialidad_id}/tarifa-base",
     response_model=TarifaBaseAPIResponse,
     status_code=status.HTTP_200_OK,
-    summary="Establecer una tarifa base para el copago (FUN-15)",
+    summary="Establecer una tarifa base para el copago",
     responses={
         200: {
             "description": "Operación exitosa: Establecer una tarifa base para el copago",
