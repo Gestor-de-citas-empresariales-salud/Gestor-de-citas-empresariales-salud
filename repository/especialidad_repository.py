@@ -78,6 +78,9 @@ class EspecialidadRepository:
             9: ["890201"],
             10: ["890381"],
         }
+        self._duracion_base_por_especialidad: Dict[int, int] = {}
+        self._requisitos_previos_por_especialidad: Dict[int, str] = {}
+        self._tarifa_base_por_especialidad: Dict[int, dict] = {}
 
         self._catalogo_cups: Dict[str, bool] = dict(CATALOGO_CUPS_VIGENTES)
         self._siguiente_id: int = 11
@@ -144,3 +147,41 @@ class EspecialidadRepository:
             "total_codigos": len(actuales),
             "codigos_cups": list(actuales),
         }
+
+    def actualizar_duracion_base(
+        self, especialidad_id: int, duracion_base_minutos: int
+    ) -> dict:
+        self._verificar_disponibilidad()
+        self._duracion_base_por_especialidad[especialidad_id] = duracion_base_minutos
+        return {
+            "especialidad_id": especialidad_id,
+            "duracion_base_minutos": duracion_base_minutos,
+        }
+
+    def actualizar_requisitos_previos(
+        self, especialidad_id: int, texto_requisitos: str
+    ) -> dict:
+        self._verificar_disponibilidad()
+        self._requisitos_previos_por_especialidad[especialidad_id] = texto_requisitos
+        return {
+            "especialidad_id": especialidad_id,
+            "requisitos_registrados": True,
+        }
+
+    def obtener_requisitos_previos_notificaciones(
+        self, especialidad_id: int
+    ) -> Optional[str]:
+        self._verificar_disponibilidad()
+        return self._requisitos_previos_por_especialidad.get(especialidad_id)
+
+    def actualizar_tarifa_base(
+        self, especialidad_id: int, tarifa_base: float, moneda: str
+    ) -> dict:
+        self._verificar_disponibilidad()
+        registro_tarifa = {
+            "especialidad_id": especialidad_id,
+            "tarifa_base": tarifa_base,
+            "moneda": moneda,
+        }
+        self._tarifa_base_por_especialidad[especialidad_id] = registro_tarifa
+        return dict(registro_tarifa)
