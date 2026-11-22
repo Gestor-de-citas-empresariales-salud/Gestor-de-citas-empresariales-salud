@@ -59,9 +59,7 @@ class ProfesionalRepository:
 
     def buscar_por_id(self, profesional_id: str):
         for prof in self._db_profesionales:
-            if str(prof.get("profesional_id")) == str(
-                professional_id_str := profesional_id
-            ):
+            if str(prof.get("profesional_id")) == str(profesional_id):
                 return prof
         return None
 
