@@ -128,6 +128,31 @@ def calcular_horas_totales(bloques: list) -> int:
     return int(horas_semanales)
 
 
+# Valida que cada bloque de la jornada respete la duración base de la especialidad
+def validar_bloques_duracion_especialidad(
+    bloques: list, duracion_base_minutos: Optional[int]
+) -> bool:
+    if not duracion_base_minutos or duracion_base_minutos <= 0:
+        return True
+
+    for bloque in bloques:
+        h_ini_h, h_ini_m = map(int, bloque.get("hora_inicio", "00:00").split(":"))
+        h_fin_h, h_fin_m = map(int, bloque.get("hora_fin", "00:00").split(":"))
+        duracion_bloque = (h_fin_h * 60 + h_fin_m) - (h_ini_h * 60 + h_ini_m)
+
+        if duracion_bloque <= 0:
+            raise ValueError("La hora de inicio debe ser anterior a la hora de fin")
+
+        if duracion_bloque < duracion_base_minutos or (
+            duracion_bloque % duracion_base_minutos != 0
+        ):
+            raise ValueError(
+                f"Los bloques deben respetar la duración base de la especialidad ({duracion_base_minutos} minutos)"
+            )
+
+    return True
+
+
 # ESQUEMAS PYDANTIC
 
 
