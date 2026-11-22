@@ -125,3 +125,62 @@ class GenerarAgendaAPIResponse(BaseModel):
     mensaje: str
     data: Optional[GenerarAgendaData] = None
     success: bool
+
+
+# ---------------------------------------------------------------------------
+# HU-015: Consultar la disponibilidad de la agenda
+# ---------------------------------------------------------------------------
+
+# HU-014 crea los espacios con estado "LIBRE": es el estado "Disponible" de HU-015.
+ESTADO_DISPONIBLE = "LIBRE"
+
+
+# Caso 4: el rango de fechas es válido si fecha_fin no es anterior a fecha_inicio.
+def validar_rango_consulta(fecha_inicio: date, fecha_fin: date) -> bool:
+    if fecha_fin < fecha_inicio:
+        raise ValueError("El rango de fechas no es válido")
+    return True
+
+
+# Agrupa los espacios por médico y fecha. Ordena por médico, fecha y hora.
+def agrupar_disponibilidad(espacios: list) -> list:
+    grupos = {}
+    for espacio in espacios:
+        clave = (espacio["profesional_id"], espacio["fecha"])
+        grupos.setdefault(clave, []).append(
+            {
+                "espacio_id": espacio["espacio_id"],
+                "hora_inicio": espacio["hora_inicio"],
+                "hora_fin": espacio["hora_fin"],
+            }
+        )
+    return [
+        {
+            "profesional_id": profesional_id,
+            "fecha": fecha,
+            "espacios": sorted(lista, key=lambda e: e["hora_inicio"]),
+        }
+        for (profesional_id, fecha), lista in sorted(grupos.items())
+    ]
+
+
+class EspacioDisponible(BaseModel):
+    espacio_id: str
+    hora_inicio: str
+    hora_fin: str
+
+
+class DisponibilidadMedicoFecha(BaseModel):
+    profesional_id: str
+    fecha: str
+    espacios: list[EspacioDisponible]
+
+
+class DisponibilidadData(BaseModel):
+    disponibilidad: list[DisponibilidadMedicoFecha]
+
+
+class DisponibilidadAPIResponse(BaseModel):
+    mensaje: str
+    data: Optional[DisponibilidadData] = None
+    success: bool

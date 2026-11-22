@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from datetime import date
 
 from domain.agenda_domain import (
     GenerarAgendaAPIResponse,
@@ -10,10 +11,19 @@ from domain.agenda_domain import (
     intersectar,
     unir_contiguos,
 )
+from domain.agenda_domain import (
+    DisponibilidadAPIResponse,
+    DisponibilidadData,
+    agrupar_disponibilidad,
+    validar_rango_consulta,
+)
 from repository.agenda_repository import AgendaRepository
 from repository.profesional_repository import ProfesionalRepository
 
 MENSAJE_503 = "No fue posible generar la agenda"
+MENSAJE_503_DISPONIBILIDAD = (
+    "No fue posible consultar la disponibilidad de la agenda"
+)
 SEDES_DISPONIBLES = {1, 2, 3}
 DURACIONES_ESPECIALIDAD = {
     4: 20,
@@ -165,3 +175,53 @@ class AgendaService:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MENSAJE_503
             )
+
+    # FUN-25: consultar los espacios disponibles de la agenda
+    def consultar_disponibilidad(
+        self,
+        especialidad_id: int,
+        sede_id: int,
+        fecha_inicio: date,
+        fecha_fin: date,
+    ) -> DisponibilidadAPIResponse:
+        # Caso 6: falla de base de datos o servicio externo simulada
+        if especialidad_id == 99999999:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_DISPONIBILIDAD,
+            )
+
+        # Caso 4: rango de fechas inválido
+        try:
+            validar_rango_consulta(fecha_inicio, fecha_fin)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            )
+
+        try:
+            espacios = self.agenda_repo.consultar_disponibles(
+                especialidad_id, sede_id, fecha_inicio, fecha_fin
+            )
+            disponibilidad = agrupar_disponibilidad(espacios)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_DISPONIBILIDAD,
+            )
+
+        # Caso 3: sin espacios -> HTTP 200, success=false y lista vacía
+        if not disponibilidad:
+            return DisponibilidadAPIResponse(
+                mensaje=(
+                    "No existen espacios disponibles para los criterios indicados"
+                ),
+                data=DisponibilidadData(disponibilidad=[]),
+                success=False,
+            )
+
+        return DisponibilidadAPIResponse(
+            mensaje="Operación exitosa: Consultar disponibilidad en la agenda",
+            data=DisponibilidadData(disponibilidad=disponibilidad),
+            success=True,
+        )

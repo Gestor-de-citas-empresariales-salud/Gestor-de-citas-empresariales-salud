@@ -6,6 +6,7 @@ from domain.agenda_domain import (
     fecha_publicacion,
     minutos_a_hora,
 )
+from domain.agenda_domain import ESTADO_DISPONIBLE
 
 
 class AgendaRepository:
@@ -49,6 +50,20 @@ class AgendaRepository:
         ]
         self._db_franjas.extend(nuevas)
         return len(nuevas)
+
+    # HU-015: espacios "Disponible" filtrados por especialidad, sede y rango de fechas.
+    def consultar_disponibles(
+        self, especialidad_id: int, sede_id: int, fecha_inicio: date, fecha_fin: date
+    ) -> list:
+        desde, hasta = fecha_inicio.isoformat(), fecha_fin.isoformat()
+        return [
+            f
+            for f in self._db_franjas
+            if f["estado"] == ESTADO_DISPONIBLE
+            and f["especialidad_id"] == especialidad_id
+            and f["sede_id"] == sede_id
+            and desde <= f["fecha"] <= hasta
+        ]
 
 
 agenda_repository = AgendaRepository()

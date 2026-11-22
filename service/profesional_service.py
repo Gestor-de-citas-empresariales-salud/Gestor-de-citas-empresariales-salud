@@ -51,18 +51,6 @@ class ProfesionalService:
                 detail=str(e),
             )
 
-        # Aplicar regla de negocio de tarjeta duplicada (Dominio)
-        tarjetas_existentes = [
-            p["tarjeta_profesional"] for p in self.repo._db_profesionales
-        ]
-        try:
-            validar_tarjeta_duplicada(datos.tarjeta_profesional, tarjetas_existentes)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(e),
-            )
-
         try:
             # Caso 1: Éxito – Crear perfil (HTTP 201)
             profesional_creado = self.repo.crear_profesional(datos)
@@ -170,6 +158,9 @@ class ProfesionalService:
 
         resultado_repo = self.repo.asignar_sede(profesional_id, datos.sede_id)
 
+        from api.agenda_router import sede_agenda_local
+        sede_agenda_local.asignar_sede(profesional_id, datos.sede_id)
+
         return {
             "mensaje": "Operación exitosa: Asignar sedes/consultorios al profesional",
             "data": resultado_repo,
@@ -205,6 +196,9 @@ class ProfesionalService:
         resultado_repo = self.repo.guardar_jornada(
             profesional_id, bloques_dict, horas_calc
         )
+
+        from api.agenda_router import sede_agenda_local
+        sede_agenda_local.guardar_jornada(profesional_id, bloques_dict)
 
         return {
             "mensaje": "Operación exitosa: Definir una jornada laboral",
