@@ -133,3 +133,42 @@ class ConsultorioAPIResponse(BaseModel):
     mensaje: str
     data: Optional[ConsultorioCreadoData] = None
     success: bool
+
+
+# HU-013 (FUN-20): CONTROLAR EL LÍMITE DE AFORO POR SEDE
+
+
+# El aforo debe ser un número entero positivo (no se aceptan decimales, texto ni booleanos).
+def validar_aforo_entero_positivo(valor) -> int:
+    if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
+        raise ValueError("El aforo debe ser un número entero positivo")
+    return valor
+
+
+# RN-16: el aforo no puede superar la capacidad de los consultorios activos de la sede.
+def validar_aforo_sede(max_capacity_hora: int, consultorios_activos: int) -> bool:
+    if max_capacity_hora > consultorios_activos:
+        raise ValueError(
+            "El aforo supera la capacidad de los consultorios activos de la sede"
+        )
+    return True
+
+
+class AforoUpdate(BaseModel):
+    max_capacity_hora: int = Field(..., examples=[3])
+
+    @field_validator("max_capacity_hora", mode="before")
+    @classmethod
+    def validar_aforo(cls, v):
+        return validar_aforo_entero_positivo(v)
+
+
+class AforoActualizadoData(BaseModel):
+    sede_id: int
+    max_capacity_hora: int
+
+
+class AforoAPIResponse(BaseModel):
+    mensaje: str
+    data: Optional[AforoActualizadoData] = None
+    success: bool
