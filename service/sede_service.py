@@ -1,17 +1,23 @@
 from fastapi import HTTPException, status
 from domain.sede_domain import (
+    AforoActualizadoData,
+    AforoAPIResponse,
+    AforoUpdate,
     ConsultorioAPIResponse,
     ConsultorioCreadoData,
     ConsultorioCreate,
     SedeCreadaData,
     SedeCreate,
     SedeRegistroAPIResponse,
+    validar_aforo_sede,
     validar_capacidad_sede,
     validar_coordenadas_sede,
     validar_sede_duplicada,
     validar_tipo_consultorio_rn17,
 )
 from repository.sede_repository import SedeRepository
+
+MENSAJE_503_AFORO = "No fue posible actualizar el aforo de la sede"
 
 
 class SedeService:
@@ -141,6 +147,64 @@ class SedeService:
                 sede_id=creado["sede_id"],
                 codigo=creado["codigo"],
                 tipo=creado["tipo"],
+            ),
+            success=True,
+        )
+
+    # FUN-20: controlar el límite de aforo por sede
+    def actualizar_aforo_sede(
+        self, sede_id: int, datos: AforoUpdate
+    ) -> AforoAPIResponse:
+        try:
+            sede = self.repo.obtener_sede_por_id(sede_id)
+        except RuntimeError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_AFORO,
+            )
+
+        if sede is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró la sede indicada",
+            )
+
+        try:
+            activos = self.repo.contar_consultorios_activos_sede(sede_id)
+        except RuntimeError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_AFORO,
+            )
+
+        # RN-16: el aforo no puede superar los consultorios activos
+        try:
+            validar_aforo_sede(
+                max_capacity_hora=datos.max_capacity_hora,
+                consultorios_activos=activos,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            )
+
+        try:
+            actualizada = self.repo.actualizar_aforo_sede(
+                sede_id=sede_id,
+                max_capacity_hora=datos.max_capacity_hora,
+            )
+        except RuntimeError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_AFORO,
+            )
+
+        return AforoAPIResponse(
+            mensaje="Operación exitosa: Controlar el límite de aforo por sede",
+            data=AforoActualizadoData(
+                sede_id=actualizada["sede_id"],
+                max_capacity_hora=actualizada["max_capacity_hora"],
             ),
             success=True,
         )

@@ -167,5 +167,21 @@ class SedeRepository:
         self._consultorios[consultorio_id] = registro
         return dict(registro)
 
+    # HU-013: consultorios activos de una sede. Un consultorio sin el campo
+    # "activo" se considera activo.
+    def contar_consultorios_activos_sede(self, sede_id: int) -> int:
+        self._verificar_disponibilidad()
+        total = 0
+        for consultorio in self._consultorios.values():
+            if consultorio.get("sede_id") == sede_id and consultorio.get("activo", True):
+                total += 1
+        return total
+
+    # HU-013: guarda el aforo máximo por hora en la sede (lo leerán las reservas).
+    def actualizar_aforo_sede(self, sede_id: int, max_capacity_hora: int) -> dict:
+        self._verificar_disponibilidad()
+        self._sedes[sede_id]["max_capacity_hora"] = max_capacity_hora
+        return dict(self._sedes[sede_id])
+
 
 sede_repository = SedeRepository()
