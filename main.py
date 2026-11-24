@@ -2,6 +2,7 @@ from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from api.agenda_router import router as agenda_router
+from api.cita_router import router as cita_router
 from api.especialidad_router import router as especialidad_router
 from api.paciente_router import router as paciente_router
 from api.profesional_router import router as profesional_router
@@ -23,6 +24,9 @@ app.include_router(agenda_router)
 
 # Sedes
 app.include_router(sede_router)
+
+# Citas
+app.include_router(cita_router)
 
 
 # Capturador global
