@@ -14,6 +14,10 @@ from domain.cita_domain import (
     validar_anticipacion,
     validar_estado_reservada,
     validar_formato_cita_id,
+    CheckinAPIResponse,
+    CheckinData,
+    ESTADO_CITA_CANCELADA,
+    validar_dia_checkin,
     CitaReservadaData,
     ReservarCitaRequest,
     ESTADO_ESPACIO_OCUPADO,
@@ -26,6 +30,7 @@ from repository.cita_repository import CitaRepository
 
 MENSAJE_503_CITA = "No fue posible agendar la cita"
 MENSAJE_503_MODIFICAR_CITA = "No fue posible reprogramar o cancelar la cita"
+MENSAJE_503_CHECKIN = "No fue posible registrar la llegada del paciente"
 
 
 def ahora() -> datetime:
@@ -241,6 +246,48 @@ class CitaService:
                 cita_id=cita_id,
                 estado=cita["estado"],
                 espacio_liberado=espacio is not None,
+            ),
+            success=True,
+        )
+
+    # FUN-29: confirmar la llegada del paciente (check-in)
+    def registrar_checkin(self, cita_id: str) -> CheckinAPIResponse:
+        cita = self._cita_a_modificar(cita_id, MENSAJE_503_CHECKIN)
+        # Una cita cancelada se trata como inexistente (no es una cita activa)
+        if cita["estado"] == ESTADO_CITA_CANCELADA:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró una cita activa con el identificador indicado",
+            )
+        try:
+            validar_estado_reservada(cita["estado"])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+        momento = ahora()
+        try:
+            validar_dia_checkin(cita, momento)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+        copia_cita = dict(cita)
+        try:
+            self.cita_repo.registrar_checkin(cita_id, momento)
+            self.cita_repo.notificar_consola_medico(cita)
+        except Exception:
+            cita.clear()
+            cita.update(copia_cita)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_CHECKIN,
+            )
+
+        return CheckinAPIResponse(
+            mensaje="Operación exitosa: Confirmar la llegada del paciente",
+            data=CheckinData(
+                cita_id=cita_id,
+                estado=cita["estado"],
+                hora_llegada=cita["hora_llegada"],
             ),
             success=True,
         )
