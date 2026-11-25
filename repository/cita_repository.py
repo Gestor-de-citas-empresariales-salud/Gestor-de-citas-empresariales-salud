@@ -1,6 +1,8 @@
 import uuid
+from datetime import datetime
 
 from domain.cita_domain import ESTADO_CITA_RESERVADA
+from domain.cita_domain import ESTADO_CITA_CANCELADA
 
 
 class CitaRepository:
@@ -9,6 +11,9 @@ class CitaRepository:
         self._db_citas = []
         # Eventos asíncronos de notificación emitidos al paciente
         self._eventos_notificacion = []
+        # Auditoría de operaciones sobre las citas y mensajes a la consola del médico
+        self._auditoria = []
+        self._eventos_consola_medico = []
         # PROVISIONAL: los módulos de inasistencias (MOD-06) y de cobertura
         # (MOD-08) aún no existen. Carlos Pérez tiene 3 inasistencias
         # injustificadas y el convenio EPS de Ana María está suspendido.
@@ -48,6 +53,50 @@ class CitaRepository:
              "paciente_id": cita["paciente_id"]}
         )
         print(f"[NOTIFICACION] Cita {cita['cita_id']} reservada para el paciente {cita['paciente_id']}.")
+
+    # HU-019: la cita devuelta es el registro guardado (el servicio lo actualiza)
+    def buscar_cita(self, cita_id: str):
+        for cita in self._db_citas:
+            if cita["cita_id"] == cita_id:
+                return cita
+        return None
+
+    def reprogramar_cita(self, cita_id: str, espacio: dict) -> dict:
+        cita = self.buscar_cita(cita_id)
+        cita.setdefault("historial", []).append(
+            {
+                "accion": "REPROGRAMADA",
+                "espacio_anterior": cita["espacio_id"],
+                "espacio_nuevo": espacio["espacio_id"],
+                "fecha_anterior": cita["fecha"],
+                "hora_anterior": cita["hora_inicio"],
+                "fecha_nueva": espacio["fecha"],
+                "hora_nueva": espacio["hora_inicio"],
+            }
+        )
+        for campo in ("espacio_id", "profesional_id", "sede_id", "especialidad_id",
+                      "fecha", "hora_inicio", "hora_fin"):
+            cita[campo] = espacio[campo]
+        return cita
+
+    def cancelar_cita(self, cita_id: str, motivo: str) -> dict:
+        cita = self.buscar_cita(cita_id)
+        cita.setdefault("historial", []).append(
+            {"accion": "CANCELADA", "motivo": motivo, "espacio_anterior": cita["espacio_id"]}
+        )
+        cita["estado"] = ESTADO_CITA_CANCELADA
+        cita["motivo_cancelacion"] = motivo
+        return cita
+
+    def registrar_auditoria(self, cita_id: str, accion: str, detalle: dict) -> None:
+        self._auditoria.append(
+            {
+                "cita_id": cita_id,
+                "accion": accion,
+                "detalle": detalle,
+                "fecha_registro": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
 
 
 cita_repository = CitaRepository()
