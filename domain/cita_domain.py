@@ -134,3 +134,30 @@ class CitaCanceladaAPIResponse(BaseModel):
     mensaje: str
     data: Optional[CitaCanceladaData] = None
     success: bool
+
+
+# ---------------------------------------------------------------------------
+# HU-020: Confirmar la llegada del paciente (check-in)
+# ---------------------------------------------------------------------------
+ESTADO_CITA_EN_SALA = "En Sala"
+
+
+# El check-in solo puede realizarse el día programado de la cita.
+def validar_dia_checkin(cita: dict, ahora: datetime) -> bool:
+    if fecha_hora_cita(cita).date() != ahora.date():
+        raise ValueError(
+            "El check-in solo puede realizarse el día programado de la cita"
+        )
+    return True
+
+
+class CheckinData(BaseModel):
+    cita_id: str
+    estado: str
+    hora_llegada: str
+
+
+class CheckinAPIResponse(BaseModel):
+    mensaje: str
+    data: Optional[CheckinData] = None
+    success: bool

@@ -9,6 +9,7 @@ from api.paciente_router import paciente_repository as paciente_repo_compartido
 from domain.cita_domain import CitaAPIResponse, ReservarCitaRequest
 from domain.cita_domain import (
     CancelarCitaRequest,
+    CheckinAPIResponse,
     CitaCanceladaAPIResponse,
     CitaReprogramadaAPIResponse,
     ReprogramarCitaRequest,
@@ -16,6 +17,7 @@ from domain.cita_domain import (
 from repository.cita_repository import cita_repository
 from service.cita_service import MENSAJE_503_CITA, CitaService
 from service.cita_service import MENSAJE_503_MODIFICAR_CITA
+from service.cita_service import MENSAJE_503_CHECKIN
 
 router = APIRouter(prefix="/api/v1/citas", tags=["Citas"])
 
@@ -228,3 +230,50 @@ def cancelar_cita(
         return _respuesta_error(
             status.HTTP_503_SERVICE_UNAVAILABLE, MENSAJE_503_MODIFICAR_CITA
         )
+
+
+@router.post(
+    "/{cita_id}/check-in",
+    response_model=CheckinAPIResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar la llegada del paciente (check-in)",
+    description=(
+        ""
+    ),
+    responses={
+        400: _ejemplo_error(
+            "Datos o parámetros inválidos",
+            "El formato del campo cita_id no es válido",
+        ),
+        404: _ejemplo_error(
+            "La cita no existe o ya fue cancelada",
+            "No se encontró una cita activa con el identificador indicado",
+        ),
+        409: _ejemplo_error(
+            "La cita no está Reservada",
+            "La cita no se encuentra en un estado que permita esta operación",
+        ),
+        422: _ejemplo_error(
+            "La fecha actual no corresponde al día de la cita",
+            "El check-in solo puede realizarse el día programado de la cita",
+        ),
+        503: _ejemplo_error(
+            "Falla de base de datos o servicio externo", MENSAJE_503_CHECKIN
+        ),
+        **_RESPUESTAS_AUTH,
+    },
+)
+def confirmar_llegada(
+    cita_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    service: CitaService = Depends(get_cita_service),
+):
+    acceso = _validar_acceso(credentials)
+    if acceso:
+        return acceso
+    try:
+        return service.registrar_checkin(cita_id)
+    except HTTPException as ex:
+        return _respuesta_error(ex.status_code, ex.detail)
+    except Exception:
+        return _respuesta_error(status.HTTP_503_SERVICE_UNAVAILABLE, MENSAJE_503_CHECKIN)

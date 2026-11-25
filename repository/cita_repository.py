@@ -3,6 +3,7 @@ from datetime import datetime
 
 from domain.cita_domain import ESTADO_CITA_RESERVADA
 from domain.cita_domain import ESTADO_CITA_CANCELADA
+from domain.cita_domain import ESTADO_CITA_EN_SALA
 
 
 class CitaRepository:
@@ -97,6 +98,24 @@ class CitaRepository:
                 "fecha_registro": datetime.now().isoformat(timespec="seconds"),
             }
         )
+
+    # HU-020: marca la llegada del paciente
+    def registrar_checkin(self, cita_id: str, momento: datetime) -> dict:
+        cita = self.buscar_cita(cita_id)
+        cita["estado"] = ESTADO_CITA_EN_SALA
+        cita["hora_llegada"] = momento.replace(microsecond=0).isoformat()
+        return cita
+
+    # HU-020: mensaje a la consola del profesional asignado
+    def notificar_consola_medico(self, cita: dict) -> None:
+        self._eventos_consola_medico.append(
+            {
+                "evento": "PACIENTE_EN_SALA",
+                "profesional_id": cita["profesional_id"],
+                "cita_id": cita["cita_id"],
+            }
+        )
+        print(f"[CONSOLA MEDICO] Paciente en sala para la cita {cita['cita_id']} (profesional {cita['profesional_id']}).")
 
 
 cita_repository = CitaRepository()
