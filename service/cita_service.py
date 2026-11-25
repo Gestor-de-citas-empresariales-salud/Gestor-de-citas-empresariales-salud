@@ -1,8 +1,19 @@
 from fastapi import HTTPException, status
 
+from datetime import datetime
+
 from domain.agenda_domain import ESTADO_DISPONIBLE
 from domain.cita_domain import (
     CitaAPIResponse,
+    CitaCanceladaAPIResponse,
+    CitaCanceladaData,
+    CitaReprogramadaAPIResponse,
+    CitaReprogramadaData,
+    CancelarCitaRequest,
+    ReprogramarCitaRequest,
+    validar_anticipacion,
+    validar_estado_reservada,
+    validar_formato_cita_id,
     CitaReservadaData,
     ReservarCitaRequest,
     ESTADO_ESPACIO_OCUPADO,
@@ -14,6 +25,12 @@ from repository.agenda_repository import AgendaRepository
 from repository.cita_repository import CitaRepository
 
 MENSAJE_503_CITA = "No fue posible agendar la cita"
+MENSAJE_503_MODIFICAR_CITA = "No fue posible reprogramar o cancelar la cita"
+
+
+def ahora() -> datetime:
+    # Reloj del servicio, separado para poder probar la regla de anticipación
+    return datetime.now()
 
 
 class CitaService:
@@ -99,6 +116,131 @@ class CitaService:
                 hora_inicio=cita["hora_inicio"],
                 profesional_id=cita["profesional_id"],
                 sede_id=cita["sede_id"],
+            ),
+            success=True,
+        )
+
+    def _buscar_espacio(self, espacio_id):
+        return next(
+            (f for f in self.agenda_repo._db_franjas
+             if str(f["espacio_id"]) == str(espacio_id)),
+            None,
+        )
+
+    def _cita_a_modificar(self, cita_id: str, mensaje_503: str) -> dict:
+        # Falla de base de datos o servicio externo simulada
+        if cita_id == "falla-externa":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=mensaje_503
+            )
+        try:
+            validar_formato_cita_id(cita_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        cita = self.cita_repo.buscar_cita(cita_id)
+        if not cita:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró la cita indicada",
+            )
+        return cita
+
+    def _validar_modificable(self, cita: dict) -> None:
+        try:
+            validar_estado_reservada(cita["estado"])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        try:
+            validar_anticipacion(cita, ahora())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    # FUN-27: reprogramar una cita médica
+    def reprogramar_cita(
+        self, cita_id: str, datos: ReprogramarCitaRequest
+    ) -> CitaReprogramadaAPIResponse:
+        cita = self._cita_a_modificar(cita_id, MENSAJE_503_MODIFICAR_CITA)
+        self._validar_modificable(cita)
+
+        nuevo = self._buscar_espacio(datos.nuevo_espacio_id)
+        if not nuevo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró el espacio indicado",
+            )
+        try:
+            validar_espacio_libre(nuevo["estado"], ESTADO_DISPONIBLE)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+        # Transacción: libera el espacio anterior, ocupa el nuevo y actualiza la cita
+        anterior = self._buscar_espacio(cita["espacio_id"])
+        copia_cita = dict(cita)
+        copia_historial = list(cita.get("historial", []))
+        try:
+            if anterior:
+                anterior["estado"] = ESTADO_DISPONIBLE
+            nuevo["estado"] = ESTADO_ESPACIO_OCUPADO
+            self.cita_repo.reprogramar_cita(cita_id, nuevo)
+            self.cita_repo.registrar_auditoria(
+                cita_id, "REPROGRAMAR", {"espacio_nuevo": nuevo["espacio_id"]}
+            )
+        except Exception:
+            cita.clear()
+            cita.update(copia_cita)
+            cita["historial"] = copia_historial
+            if anterior:
+                anterior["estado"] = ESTADO_ESPACIO_OCUPADO
+            nuevo["estado"] = ESTADO_DISPONIBLE
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_MODIFICAR_CITA,
+            )
+
+        return CitaReprogramadaAPIResponse(
+            mensaje="Operación exitosa: Reprogramar una cita médica",
+            data=CitaReprogramadaData(
+                cita_id=cita_id,
+                estado=cita["estado"],
+                nuevo_espacio_id=datos.nuevo_espacio_id,
+            ),
+            success=True,
+        )
+
+    # FUN-28: cancelar una cita médica
+    def cancelar_cita(
+        self, cita_id: str, datos: CancelarCitaRequest
+    ) -> CitaCanceladaAPIResponse:
+        cita = self._cita_a_modificar(cita_id, MENSAJE_503_MODIFICAR_CITA)
+        self._validar_modificable(cita)
+
+        espacio = self._buscar_espacio(cita["espacio_id"])
+        copia_cita = dict(cita)
+        copia_historial = list(cita.get("historial", []))
+        try:
+            if espacio:
+                espacio["estado"] = ESTADO_DISPONIBLE
+            self.cita_repo.cancelar_cita(cita_id, datos.motivo)
+            self.cita_repo.registrar_auditoria(
+                cita_id, "CANCELAR", {"motivo": datos.motivo}
+            )
+        except Exception:
+            cita.clear()
+            cita.update(copia_cita)
+            cita["historial"] = copia_historial
+            if espacio:
+                espacio["estado"] = ESTADO_ESPACIO_OCUPADO
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=MENSAJE_503_MODIFICAR_CITA,
+            )
+
+        return CitaCanceladaAPIResponse(
+            mensaje="Operación exitosa: Cancelar una cita médica",
+            data=CitaCanceladaData(
+                cita_id=cita_id,
+                estado=cita["estado"],
+                espacio_liberado=espacio is not None,
             ),
             success=True,
         )

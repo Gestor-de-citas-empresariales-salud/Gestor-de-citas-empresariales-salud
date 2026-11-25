@@ -2,8 +2,12 @@
 # Agendar una cita médica
 
 from typing import Optional, Union
+from datetime import datetime, timedelta
+from typing import Annotated
+import uuid
 
 from pydantic import BaseModel, Field
+from pydantic import StringConstraints
 
 # RN-27: 3 inasistencias injustificadas en el año suspenden la reserva en línea.
 MAX_INASISTENCIAS_INJUSTIFICADAS = 3
@@ -56,4 +60,77 @@ class CitaReservadaData(BaseModel):
 class CitaAPIResponse(BaseModel):
     mensaje: str
     data: Optional[CitaReservadaData] = None
+    success: bool
+
+
+# ---------------------------------------------------------------------------
+# HU-019: Reprogramar o cancelar una cita médica
+# ---------------------------------------------------------------------------
+ESTADO_CITA_CANCELADA = "Cancelada"
+
+# RN-26: solo se puede reprogramar o cancelar con mínimo 2 horas de anticipación.
+ANTICIPACION_MINIMA_HORAS = 2
+
+
+def validar_formato_cita_id(cita_id: str) -> bool:
+    try:
+        uuid.UUID(str(cita_id))
+    except ValueError:
+        raise ValueError("El formato del campo cita_id no es válido")
+    return True
+
+
+def validar_estado_reservada(estado: str) -> bool:
+    if estado != ESTADO_CITA_RESERVADA:
+        raise ValueError(
+            "La cita no se encuentra en un estado que permita esta operación"
+        )
+    return True
+
+
+def fecha_hora_cita(cita: dict) -> datetime:
+    return datetime.fromisoformat(f"{cita['fecha']}T{cita['hora_inicio']}")
+
+
+def validar_anticipacion(cita: dict, ahora: datetime) -> bool:
+    if fecha_hora_cita(cita) - ahora < timedelta(hours=ANTICIPACION_MINIMA_HORAS):
+        raise ValueError(
+            "La cita solo puede modificarse con mínimo 2 horas de anticipación"
+        )
+    return True
+
+
+class ReprogramarCitaRequest(BaseModel):
+    nuevo_espacio_id: Union[int, str] = Field(
+        ..., examples=["c0a8012e-5b1f-4d7a-9a3e-2f6b8d1c4e90"]
+    )
+
+
+class CancelarCitaRequest(BaseModel):
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = Field(
+        ..., examples=["No puedo asistir"]
+    )
+
+
+class CitaReprogramadaData(BaseModel):
+    cita_id: str
+    estado: str
+    nuevo_espacio_id: Union[int, str]
+
+
+class CitaReprogramadaAPIResponse(BaseModel):
+    mensaje: str
+    data: Optional[CitaReprogramadaData] = None
+    success: bool
+
+
+class CitaCanceladaData(BaseModel):
+    cita_id: str
+    estado: str
+    espacio_liberado: bool
+
+
+class CitaCanceladaAPIResponse(BaseModel):
+    mensaje: str
+    data: Optional[CitaCanceladaData] = None
     success: bool
