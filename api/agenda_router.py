@@ -1,17 +1,23 @@
-from typing import Optional
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.profesional_router import profesional_repository
-from domain.agenda_domain import GenerarAgendaAPIResponse, GenerarAgendaRequest
-from domain.agenda_domain import DisponibilidadAPIResponse
+from domain.agenda_domain import (
+    DisponibilidadAPIResponse,
+    GenerarAgendaAPIResponse,
+    GenerarAgendaRequest,
+)
 from repository.agenda_repository import AgendaRepository
-from service.agenda_service import MENSAJE_503, AgendaService, SedeAgendaLocal
-from service.agenda_service import MENSAJE_503_DISPONIBILIDAD
+from service.agenda_service import (
+    MENSAJE_503,
+    MENSAJE_503_DISPONIBILIDAD,
+    AgendaService,
+    SedeAgendaLocal,
+)
 
 router = APIRouter(prefix="/api/v1/agendas", tags=["Agendas"])
 
@@ -45,6 +51,42 @@ def _ejemplo_error(descripcion: str, mensaje: str) -> dict:
             }
         },
     }
+
+
+def _parsear_entero_positivo(valor: Optional[str], campo: str) -> int:
+    if valor is None or str(valor).strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El campo '{campo}' es obligatorio",
+        )
+    try:
+        numero = int(str(valor).strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error en el campo '{campo}': debe ser un número entero válido",
+        )
+    if numero <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error en el campo '{campo}': debe ser mayor que 0",
+        )
+    return numero
+
+
+def _parsear_fecha_iso(valor: Optional[str], campo: str) -> date:
+    if valor is None or str(valor).strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El campo '{campo}' es obligatorio",
+        )
+    try:
+        return date.fromisoformat(str(valor).strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error en el campo '{campo}': formato de fecha inválido (use YYYY-MM-DD)",
+        )
 
 
 @router.post(
@@ -142,7 +184,7 @@ def generar_agenda(
         },
         400: _ejemplo_error(
             "Datos o parámetros inválidos / rango de fechas inválido",
-            "El rango de fechas no es válido",
+            "El campo 'especialidad_id' es obligatorio",
         ),
         401: _ejemplo_error(
             "Token de autenticación inválido o ausente",
@@ -159,17 +201,17 @@ def generar_agenda(
     },
 )
 def consultar_disponibilidad(
-    especialidad_id: int = Query(
-        ..., gt=0, description="Identificador de la especialidad", examples=[4]
+    especialidad_id: Optional[str] = Query(
+        default=None, description="Identificador de la especialidad", examples=[4]
     ),
-    sede_id: int = Query(
-        ..., gt=0, description="Identificador de la sede (1, 2 o 3)", examples=[3]
+    sede_id: Optional[str] = Query(
+        default=None, description="Identificador de la sede (1, 2 o 3)", examples=[3]
     ),
-    fecha_inicio: date = Query(
-        ..., description="Inicio del rango (YYYY-MM-DD)", examples=["2026-11-16"]
+    fecha_inicio: Optional[str] = Query(
+        default=None, description="Inicio del rango (YYYY-MM-DD)", examples=["2026-11-16"]
     ),
-    fecha_fin: date = Query(
-        ..., description="Fin del rango (YYYY-MM-DD)", examples=["2026-11-30"]
+    fecha_fin: Optional[str] = Query(
+        default=None, description="Fin del rango (YYYY-MM-DD)", examples=["2026-11-30"]
     ),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     service: AgendaService = Depends(get_agenda_service),
@@ -185,9 +227,11 @@ def consultar_disponibilidad(
         )
 
     try:
-        return service.consultar_disponibilidad(
-            especialidad_id, sede_id, fecha_inicio, fecha_fin
-        )
+        esp_id = _parsear_entero_positivo(especialidad_id, "especialidad_id")
+        sed_id = _parsear_entero_positivo(sede_id, "sede_id")
+        f_inicio = _parsear_fecha_iso(fecha_inicio, "fecha_inicio")
+        f_fin = _parsear_fecha_iso(fecha_fin, "fecha_fin")
+        return service.consultar_disponibilidad(esp_id, sed_id, f_inicio, f_fin)
     except HTTPException as ex:
         return _respuesta_error(ex.status_code, ex.detail)
     except Exception:
