@@ -151,9 +151,7 @@ def generar_agenda(
     status_code=status.HTTP_200_OK,
     summary="Consultar la disponibilidad de la agenda",
     description=(
-        "Retorna los espacios en estado Disponible filtrados por especialidad, "
-        "sede y rango de fechas, agrupados por médico y fecha. Si no hay "
-        "espacios responde HTTP 200 con success=false y una lista vacía."
+        ""
     ),
     responses={
         200: {
